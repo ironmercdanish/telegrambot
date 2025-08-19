@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 from dotenv import load_dotenv
 from telegram import Update
@@ -16,7 +17,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Set your ADMIN ID (replace with your real chat_id)
-ADMIN_ID = 7592315694  # apna ID daalna
+ADMIN_ID = 7592315694  # <-- apna telegram chat_id daalna
 
 # Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -47,27 +48,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text.startswith("/reply"):
         try:
             parts = text.split(" ", 2)
-            user_id = int(parts[1])
-            reply_text = parts[2]
+
+            if len(parts) < 3:
+                await update.message.reply_text("⚠️ Usage: /reply <user_id> <message>")
+                return
+
+            # Clean user_id (remove non-digits like \n or 'Send')
+            user_id_str = re.sub(r"\D", "", parts[1])
+            user_id = int(user_id_str)
+
+            reply_text = parts[2].strip()
             await context.bot.send_message(user_id, reply_text)
             await update.message.reply_text(f"✅ Sent to {user_id}")
         except Exception as e:
             await update.message.reply_text(f"⚠️ Error: {e}")
 
-    # Agar admin photo bhejta hai → usko /reply ke sath bhejna padega
+    # Agar admin photo/document bhejta hai with caption "/reply <user_id> <optional_text>"
     elif chat_id == ADMIN_ID and (update.message.photo or update.message.document):
         try:
             parts = update.message.caption.split(" ", 2) if update.message.caption else []
             if len(parts) >= 2 and parts[0] == "/reply":
-                user_id = int(parts[1])
+                # Clean user_id
+                user_id_str = re.sub(r"\D", "", parts[1])
+                user_id = int(user_id_str)
+
+                caption_text = parts[2].strip() if len(parts) > 2 else ""
 
                 if update.message.photo:
                     file_id = update.message.photo[-1].file_id
-                    await context.bot.send_photo(user_id, file_id, caption=(parts[2] if len(parts) > 2 else ""))
+                    await context.bot.send_photo(user_id, file_id, caption=caption_text)
 
                 if update.message.document:
                     file_id = update.message.document.file_id
-                    await context.bot.send_document(user_id, file_id, caption=(parts[2] if len(parts) > 2 else ""))
+                    await context.bot.send_document(user_id, file_id, caption=caption_text)
 
                 await update.message.reply_text(f"✅ Media sent to {user_id}")
             else:
